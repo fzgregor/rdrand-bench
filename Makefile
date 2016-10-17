@@ -2,7 +2,7 @@
 all: bench distribution
 
 bench: bench.c
-	$(CC) -o $@ $< -lpthread
+	$(CC) -Irdtsc/ -o $@ $< -lpthread
 
 distribution: distribution.c
 	$(CC) -o $@ $< 

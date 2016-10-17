@@ -1,0 +1,3 @@
+[submodule "rdtsc"]
+	path = rdtsc
+	url = git@github.com:rotschopf/rdtsc.git

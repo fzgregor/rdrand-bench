@@ -6,6 +6,7 @@
 
 #include <sys/mman.h>
 #include "rdrand.h"
+#include "rdtsc.h"
 
 const int SIZE = 128*1024*1024;
 const int NANO_SECONDS_IN_SEC = 1000000000;
@@ -16,39 +17,6 @@ typedef struct thread_state_s {
     uint8_t *memory;
     uint32_t tsc_ticks;
 } thread_state_t;
-
-uint64_t rdtsc() {
-    unsigned int a, d;
-    asm volatile("rdtsc" : "=a" (a), "=d" (d));
-    return (((uint64_t)a) | (((uint64_t)d) << 32));
-}
-
-struct timespec *TimeSpecDiff(struct timespec *ts1, struct timespec *ts2)
-{
-  static struct timespec ts;
-  ts.tv_sec = ts1->tv_sec - ts2->tv_sec;
-  ts.tv_nsec = ts1->tv_nsec - ts2->tv_nsec;
-  if (ts.tv_nsec < 0) {
-    ts.tv_sec--;
-    ts.tv_nsec += NANO_SECONDS_IN_SEC;
-  }
-  return &ts;
-}
-
-static double calibrate_ticks()
-{
-  struct timespec begints, endts;
-  uint64_t begin = 0, end = 0;
-  clock_gettime(CLOCK_MONOTONIC, &begints);
-  begin = rdtsc();
-  uint64_t i;
-  for (i = 0; i < 1000000; i++); /* must be CPU intensive */
-  end = rdtsc();
-  clock_gettime(CLOCK_MONOTONIC, &endts);
-  struct timespec *tmpts = TimeSpecDiff(&endts, &begints);
-  uint64_t nsecElapsed = tmpts->tv_sec * 1000000000LL + tmpts->tv_nsec;
-  return (double)(end - begin)/(double)nsecElapsed;
-}
 
 void *thread_run_rdrand32(void *tstate_void) {
     thread_state_t *tstate = (thread_state_t*)tstate_void;
@@ -82,15 +50,14 @@ void do_bench(uint32_t tcnt, bool csv_out, pthread_t* tids, thread_state_t* tsta
         pthread_create(&tids[i], NULL, c, (void*)&tstates[i]);
     }
 
-    uint64_t tsc_ticks = rdtsc();
+    uint64_t begin = rdtsc();
     pthread_barrier_wait(&barrier);
 
     for (i=0; i < tcnt; i++) {
         pthread_join(tids[i], NULL);
     }
-    tsc_ticks = rdtsc() - tsc_ticks;
+    double time = elapsed_nsecs(begin)/NANO_SECONDS_IN_SEC;
     uint64_t size = SIZE/1024/1024;
-    double time = tsc_ticks/calibrate_ticks()/NANO_SECONDS_IN_SEC;
 
     if (csv_out) {
         printf("%s,%d,%lu,%f,%f\n", name, tcnt, tcnt*size, time, tcnt*size/time);
