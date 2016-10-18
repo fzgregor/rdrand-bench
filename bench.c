@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -8,23 +9,35 @@
 #include "rdrand.h"
 #include "rdtsc.h"
 
-const int SIZE = 128*1024*1024;
+const int SIZE = 256*1024*1024;
 const int NANO_SECONDS_IN_SEC = 1000000000;
 
 pthread_barrier_t barrier;
 
 typedef struct thread_state_s {
-    uint8_t *memory;
-    uint32_t tsc_ticks;
 } thread_state_t;
+
+void *thread_run_crc32_rand(void *tstate_void) {
+    thread_state_t *tstate = (thread_state_t*)tstate_void;
+
+    pthread_barrier_wait(&barrier);
+    uint64_t i = 0;
+    volatile uint32_t rand;
+    for (; i < SIZE; i+=4) {
+        rand = crc32_rand();
+    }
+
+    return NULL;
+}
 
 void *thread_run_rdrand32(void *tstate_void) {
     thread_state_t *tstate = (thread_state_t*)tstate_void;
 
     pthread_barrier_wait(&barrier);
     uint64_t i = 0;
+    volatile uint32_t rand;
     for (; i < SIZE; i+=4) {
-        real_rdrand32((uint32_t*)&tstate->memory[i]);
+        rand = real_rdrand32();
     }
 
     return NULL;
@@ -35,8 +48,9 @@ void *thread_run_rdrand64(void *tstate_void) {
 
     pthread_barrier_wait(&barrier);
     uint64_t i = 0;
+    volatile uint64_t rand;
     for (; i < SIZE; i+=8) {
-        rdrand64((uint64_t*)&tstate->memory[i]);
+        rand = rdrand64();
     }
 
     return NULL;
@@ -60,9 +74,9 @@ void do_bench(uint32_t tcnt, bool csv_out, pthread_t* tids, thread_state_t* tsta
     uint64_t size = SIZE/1024/1024;
 
     if (csv_out) {
-        printf("%s,%d,%lu,%f,%f\n", name, tcnt, tcnt*size, time, tcnt*size/time);
+        printf("%s,%d,%f,%f\n", name, tcnt, time, tcnt*size/time);
     } else {
-        printf("%s: %d Threads %lu MB in %f secs %f MB/s\n", name, tcnt, tcnt*size, time, tcnt*size/time);
+        printf("%s: %d Threads in %f secs %f MB/s\n", name, tcnt,  time, tcnt*size/time);
     }
 
     pthread_barrier_destroy(&barrier);
@@ -96,25 +110,19 @@ int main(int argc, char* argv[]) {
     thread_state_t* tstates = (thread_state_t*)calloc(sizeof(thread_state_t), max_tcnt);
     pthread_t* tids = (pthread_t*)calloc(sizeof(pthread_t), max_tcnt);
 
-    for (; i < max_tcnt; i++) {
-        tstates[i].memory = mmap(NULL, SIZE, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON|MAP_POPULATE, -1, 0);
-        if (tstates[i].memory == NULL) {
-            perror("mmap");
-            exit(1);
-        }
-    }
-
     if (csv_out) {
-        printf("name,threads,size,seconds,throughput\n");
+        printf("name,threads,seconds,throughput\n");
     }
 
-    i = 1;
-    for (; i <= max_tcnt; i++) {
+    for (i=1; i <= max_tcnt; i++) {
+        do_bench(i, csv_out, tids, tstates, "crc32_rand", thread_run_crc32_rand);
+    }
+
+    for (i=1; i <= max_tcnt; i++) {
         do_bench(i, csv_out, tids, tstates, "rdrand32", thread_run_rdrand32);
     }
 
-    i = 1;
-    for (; i <= max_tcnt; i++) {
+    for (i=1; i <= max_tcnt; i++) {
         do_bench(i, csv_out, tids, tstates, "rdrand64", thread_run_rdrand64);
     }
 }

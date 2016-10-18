@@ -2,10 +2,10 @@
 all: bench distribution
 
 bench: bench.c
-	$(CC) -Irdtsc/ -o $@ $< -lpthread
+	$(CC) $(CFLAGS) -Irdtsc/ -o $@ $< -lpthread
 
 distribution: distribution.c
-	$(CC) -o $@ $< 
+	$(CC) $(CFLAGS) -o $@ $< 
 
 clean:
 	rm -f bench distribution
